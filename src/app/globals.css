@@ -1,26 +1,140 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+@layer base {
+  body {
+    @apply bg-gradient-to-br from-gray-50 to-blue-50 min-h-screen text-base;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-medium tracking-tight text-gray-800;
+  }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  h1 {
+    @apply text-2xl md:text-3xl lg:text-4xl;
+  }
+
+  h2 {
+    @apply text-xl md:text-2xl lg:text-3xl;
+  }
+
+  h3 {
+    @apply text-lg md:text-xl;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer components {
+  .container-responsive {
+    @apply w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  .input-primary {
+    @apply w-full rounded-lg border border-gray-300 px-3 py-2 md:px-4 md:py-2 transition-all duration-200
+           focus:border-blue-500 focus:ring-2 focus:ring-blue-200 
+           hover:border-blue-400 focus:outline-none shadow-sm;
+  }
+
+  .input-primary:disabled {
+    @apply bg-gray-100 opacity-70 cursor-not-allowed;
+  }
+
+  .result-card {
+    @apply rounded-lg bg-white p-3 md:p-5 shadow-sm transition-all duration-300 hover:shadow-md 
+           border border-transparent hover:border-blue-100 hover:translate-y-[-2px];
+  }
+
+  .section-title {
+    @apply mb-3 md:mb-5 text-lg md:text-xl font-semibold text-gray-800 border-b-2 border-blue-200 pb-2 
+           flex items-center justify-between;
+  }
+
+  .loading-spinner {
+    @apply animate-spin h-5 w-5 md:h-6 md:w-6 text-blue-500;
+  }
+
+  .stress-indicator {
+    @apply h-2 w-2 md:h-3 md:w-3 rounded-full shadow-sm;
+  }
+  
+  .btn {
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.5rem;
+    font-weight: 500;
+    transition-property: all;
+    transition-duration: 200ms;
+  }
+  
+  @media (min-width: 768px) {
+    .btn {
+      padding: 0.5rem 1rem;
+    }
+  }
+  
+  .btn:focus {
+    outline: none;
+    --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);
+    --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color);
+    box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
+  }
+  
+  .btn-primary {
+    @apply bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-300
+           shadow-sm hover:shadow active:bg-blue-800 px-3 py-1.5 md:px-4 md:py-2 rounded-lg font-medium transition-all duration-200 
+           focus:outline-none focus:ring-2;
+  }
+  
+  .btn-secondary {
+    @apply bg-gray-200 text-gray-700 hover:bg-gray-300 focus:ring-gray-200
+           active:bg-gray-400 px-3 py-1.5 md:px-4 md:py-2 rounded-lg font-medium transition-all duration-200 
+           focus:outline-none focus:ring-2;
+  }
+  
+  .btn-sm {
+    @apply px-2 py-1 md:px-3 md:py-1.5 text-xs md:text-sm rounded;
+  }
+  
+  .card {
+    @apply bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden 
+           transition-all duration-300 hover:shadow-md p-3 md:p-4 lg:p-5;
+  }
+  
+  .form-group {
+    @apply space-y-1 md:space-y-1.5;
+  }
+  
+  .form-label {
+    @apply block text-xs md:text-sm font-medium text-gray-700;
+  }
+  
+  .form-card {
+    @apply bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100;
+  }
+  
+  .range-slider {
+    @apply w-full h-1.5 md:h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer;
+  }
+  
+  .range-slider::-webkit-slider-thumb {
+    @apply appearance-none w-4 h-4 md:w-5 md:h-5 rounded-full bg-blue-600 cursor-pointer;
+  }
+  
+  .tooltip {
+    @apply absolute invisible group-hover:visible bg-gray-900 text-white text-xs rounded px-2 py-1 
+           -mt-8 -ml-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300;
+  }
+
+  .grid-responsive {
+    @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6;
+  }
+
+  .flex-responsive {
+    @apply flex flex-col md:flex-row;
+  }
+
+  .flex-responsive-reverse {
+    @apply flex flex-col-reverse md:flex-row;
+  }
 }
