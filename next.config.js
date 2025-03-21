@@ -3,11 +3,11 @@ const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ['three'],
   webpack: (config) => {
-    // This is needed for proper handling of workers in Three.js
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      'three': require.resolve('three')
+    // This is needed for proper handling of Three.js modules
+    config.resolve.extensionAlias = {
+      '.js': ['.js', '.ts', '.tsx']
     };
+    
     return config;
   },
 };

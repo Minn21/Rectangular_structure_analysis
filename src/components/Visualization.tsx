@@ -1,9 +1,10 @@
 'use client';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
-// Import from our local module to avoid type issues
+// Import from our local module which handles the compatibility issues
 import { OrbitControls } from '../lib/orbitControls';
 import { BuildingParameters, CalculationResults } from '../lib/types';
+import { OrbitControls as OrbitControlsType } from '../lib/orbitalTypes';
 import { getMaterial } from '../lib/materials';
 
 interface VisualizationProps {
@@ -16,7 +17,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ parameters, result
   const sceneRef = useRef<THREE.Scene>(new THREE.Scene());
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const controlsRef = useRef<OrbitControls | null>(null);
+  const controlsRef = useRef<OrbitControlsType | null>(null);
   const requestRef = useRef<number | null>(null);
   const lightsRef = useRef<THREE.Light[]>([]);
   const gridRef = useRef<THREE.GridHelper | null>(null);
