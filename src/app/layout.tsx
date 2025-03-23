@@ -1,6 +1,8 @@
 import './globals.css';
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
+import Navigation from '@/components/Navigation';
+import { FoundationProvider } from '@/providers/FoundationProvider';
 
 const inter = Inter({ 
   subsets: ['latin'],
@@ -9,8 +11,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'Structural Analysis Studio',
-  description: 'Interactive 3D structural modeling and analysis for building design',
+  title: 'Structural Analysis App',
+  description: 'A comprehensive structural analysis application for engineering design',
 };
 
 export default function RootLayout({
@@ -20,7 +22,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={inter.variable}>
-      <body className={inter.className}>{children}</body>
+      <body className={inter.className}>
+        <FoundationProvider>
+          <Navigation />
+          <main>
+            {children}
+          </main>
+        </FoundationProvider>
+      </body>
     </html>
   );
 }
