@@ -50,6 +50,19 @@ export interface StructuralElement {
   orientation: THREE.Quaternion;
 }
 
+// Seismic parameters for earthquake simulation
+export interface SeismicParameters {
+  intensity: number; // Peak ground acceleration (g)
+  frequency: number; // Dominant frequency (Hz)
+  duration: number; // Duration of earthquake (seconds)
+  direction: 'x' | 'z' | 'both'; // Direction of seismic force
+  spectralAcceleration: number; // Design spectral acceleration (g)
+  importanceFactor: number; // Building importance factor
+  responseModificationFactor: number; // Structural ductility factor
+  soilType: 'A' | 'B' | 'C' | 'D' | 'E'; // Site soil classification
+  dampingRatio?: number; // Structural damping ratio (default 0.05)
+}
+
 // Using CalculationResults interface from types.d.ts
 
 export interface Foundation {
