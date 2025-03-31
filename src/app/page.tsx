@@ -101,6 +101,24 @@ export default function Home() {
               </Link>
             </div>
           </div>
+          
+          <div className="bg-white rounded-lg shadow-md overflow-hidden">
+            <div className="h-40 bg-gradient-to-r from-red-500 to-yellow-500 flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-20 w-20 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
+            </div>
+            <div className="p-6">
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">Seismic Simulation</h2>
+              <p className="text-gray-600 mb-4">
+                Simulate the effects of earthquakes on building structures. Analyze seismic response,
+                displacement patterns, and identify critical structural elements.
+              </p>
+              <Link href="/seismic-simulation" className="text-indigo-600 hover:text-indigo-800 font-medium">
+                Try Seismic Simulation &rarr;
+              </Link>
+            </div>
+          </div>
         </div>
       </section>
       
