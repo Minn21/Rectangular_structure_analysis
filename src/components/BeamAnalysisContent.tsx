@@ -346,7 +346,7 @@ export default function BeamAnalysisContent() {
                 <input
                   type="number"
                   className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                  value={(selectedSection.area * 10000).toFixed(2)}
+                  value={(selectedSection.area ? (selectedSection.area * 10000).toFixed(2) : '0.00')}
                   readOnly
                   aria-label="Section area"
                 />
@@ -511,4 +511,4 @@ export default function BeamAnalysisContent() {
       />
     </div>
   );
-} 
+}

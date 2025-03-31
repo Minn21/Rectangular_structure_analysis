@@ -11,9 +11,9 @@ export default function CalculationResults({ results }: CalculationResultsProps)
   const exportResults = () => {
     const csvContent = [
       'Metric,Value,Unit',
-      `Max Beam Deflection,${results.maxBeamDeflection.toFixed(6)},m`,
-      `Max Beam Stress,${(results.maxBeamStress / 1e6).toFixed(2)},MPa`,
-      `Max Column Stress,${(results.maxColumnStress / 1e6).toFixed(2)},MPa`,
+      results.maxBeamDeflection ? `Max Beam Deflection,${results.maxBeamDeflection.toFixed(6)},m` : 'Max Beam Deflection,N/A,m',
+      results.maxBeamStress ? `Max Beam Stress,${(results.maxBeamStress / 1e6).toFixed(2)},MPa` : 'Max Beam Stress,N/A,MPa',
+      results.maxColumnStress ? `Max Column Stress,${(results.maxColumnStress / 1e6).toFixed(2)},MPa` : 'Max Column Stress,N/A,MPa',
       results.totalWeight ? `Total Weight,${(results.totalWeight / 1000).toFixed(2)},kN` : '',
       results.naturalFrequency ? `Natural Frequency,${results.naturalFrequency.toFixed(3)},Hz` : '',
       results.baseShear ? `Base Shear,${(results.baseShear / 1000).toFixed(2)},kN` : '',
@@ -75,24 +75,24 @@ export default function CalculationResults({ results }: CalculationResultsProps)
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <ResultCard 
                 title="Max Beam Deflection" 
-                value={results.maxBeamDeflection.toFixed(3)} 
+                value={results.maxBeamDeflection?.toFixed(3) || 'N/A'} 
                 unit="m"
                 icon={<DeflectionIcon />}
-                severity={getSeverity(results.maxBeamDeflection / results.allowableDeflection)}
+                severity={getSeverity((results.maxBeamDeflection || 0) / (results.allowableDeflection || 1))}
               />
               <ResultCard 
                 title="Max Beam Stress" 
-                value={(results.maxBeamStress / 1e6).toFixed(2)} 
+                value={results.maxBeamStress ? (results.maxBeamStress / 1e6).toFixed(2) : 'N/A'} 
                 unit="MPa"
                 icon={<StressIcon />}
-                severity={getSeverity(results.maxBeamStress / results.allowableStress)}
+                severity={getSeverity((results.maxBeamStress || 0) / (results.allowableStress || 1))}
               />
               <ResultCard 
                 title="Max Column Stress" 
-                value={(results.maxColumnStress / 1e6).toFixed(2)} 
+                value={results.maxColumnStress ? (results.maxColumnStress / 1e6).toFixed(2) : 'N/A'} 
                 unit="MPa"
                 icon={<ColumnIcon />}
-                severity={getSeverity(results.maxColumnStress / results.allowableStress)}
+                severity={getSeverity((results.maxColumnStress || 0) / (results.allowableStress || 1))}
               />
             </div>
             
@@ -165,7 +165,7 @@ export default function CalculationResults({ results }: CalculationResultsProps)
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{index + 1}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{load.toFixed(2)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {(results.maxColumnStress / 1e6).toFixed(2)}
+                      {results.maxColumnStress ? (results.maxColumnStress / 1e6).toFixed(2) : 'N/A'}
                     </td>
                     {results.buckling && (
                       <td className={`px-6 py-4 whitespace-nowrap text-sm ${

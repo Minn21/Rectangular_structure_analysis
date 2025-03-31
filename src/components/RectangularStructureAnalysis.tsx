@@ -9,11 +9,13 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 interface RectangularStructureAnalysisProps {
   buildingParameters: BuildingParameters;
   material: Material;
+  onElementSelect?: (element: StructuralElement) => void;
 }
 
 const RectangularStructureAnalysis: React.FC<RectangularStructureAnalysisProps> = ({
   buildingParameters,
-  material
+  material,
+  onElementSelect
 }) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const [showDimensions, setShowDimensions] = useState<boolean>(true);
@@ -23,6 +25,34 @@ const RectangularStructureAnalysis: React.FC<RectangularStructureAnalysisProps> 
   const [explodedView, setExplodedView] = useState<boolean>(false);
   const [animateLoading, setAnimateLoading] = useState<boolean>(false);
   const [explodeFactor, setExplodeFactor] = useState<number>(0);
+  
+  // Add CSS styles for element labels and hover effects
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      .element-label {
+        position: absolute;
+        color: black;
+        background-color: rgba(255, 255, 255, 0.7);
+        padding: 2px 5px;
+        border-radius: 3px;
+        font-size: 10px;
+        pointer-events: none;
+        z-index: 100;
+        transition: opacity 0.2s;
+      }
+      
+      .element-label.hover {
+        background-color: rgba(255, 255, 255, 0.9);
+        font-weight: bold;
+      }
+    `;
+    document.head.appendChild(style);
+    
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
   
   // Set up and render the Three.js scene
   useEffect(() => {
@@ -92,6 +122,75 @@ const RectangularStructureAnalysis: React.FC<RectangularStructureAnalysisProps> 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
+    
+    // Setup raycaster for element selection
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    
+    // Event handler for element selection
+    const handleElementSelect = (event: MouseEvent) => {
+      if (!mountRef.current) return;
+      
+      const rect = mountRef.current.getBoundingClientRect();
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      
+      raycaster.setFromCamera(mouse, camera);
+      
+      // Get all meshes that represent structural elements
+      const structuralElements = [];
+      scene.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.userData.type) {
+          structuralElements.push(child);
+        }
+      });
+      
+      const intersects = raycaster.intersectObjects(structuralElements);
+      
+      if (intersects.length > 0) {
+        const selectedMesh = intersects[0].object as THREE.Mesh;
+        
+        // Reset all elements to their original material
+        structuralElements.forEach((element) => {
+          if (element instanceof THREE.Mesh) {
+            if (element.userData.originalMaterial) {
+              element.material = element.userData.originalMaterial.clone();
+            }
+          }
+        });
+        
+        // Highlight selected element
+        if (!selectedMesh.userData.originalMaterial) {
+          selectedMesh.userData.originalMaterial = selectedMesh.material;
+        }
+        
+        const highlightMaterial = (selectedMesh.userData.originalMaterial as THREE.Material).clone();
+        if (highlightMaterial instanceof THREE.MeshStandardMaterial) {
+          highlightMaterial.emissive.setHex(0x666666);
+          highlightMaterial.emissiveIntensity = 0.5;
+        }
+        selectedMesh.material = highlightMaterial;
+        
+        // Create structural element data
+        const elementData: StructuralElement = {
+          id: selectedMesh.userData.elementId,
+          type: selectedMesh.userData.type,
+          position: selectedMesh.position.clone(),
+          orientation: selectedMesh.userData.orientation || 'x',
+          floor: selectedMesh.userData.floor || 0,
+          length: selectedMesh.userData.length || 0,
+          isSelected: true
+        };
+        
+        // Notify parent component
+        if (onElementSelect) {
+          onElementSelect(elementData);
+        }
+      }
+    };
+    
+    // Add click event listener
+    renderer.domElement.addEventListener('click', handleElementSelect);
     
     // Create a stress heat map texture for stress visualization
     const createStressTexture = () => {
@@ -219,13 +318,19 @@ const RectangularStructureAnalysis: React.FC<RectangularStructureAnalysisProps> 
               varying vec2 vUv;
               varying float vStress;
               
-              // Position-based stress simulation
-              // In a real app, this would come from FEM analysis
+              // Enhanced stress simulation considering multiple factors
               void main() {
                 vUv = uv;
                 
-                // Simulate stress based on height (higher = more stress)
-                vStress = position.y / ${buildingHeight.toFixed(1)};
+                // Calculate base stress from height and position
+                float heightStress = position.y / ${buildingHeight.toFixed(1)};
+                float distanceFromCenter = length(position.xz) / ${(Math.max(buildingParameters.buildingLength, buildingParameters.buildingWidth) / 2).toFixed(1)};
+                
+                // Combine factors with different weights
+                vStress = mix(heightStress, distanceFromCenter, 0.3);
+                
+                // Add slight variation based on position
+                vStress = clamp(vStress + sin(position.x * 2.0) * 0.1 + cos(position.z * 2.0) * 0.1, 0.0, 1.0);
                 
                 gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
               }
@@ -237,9 +342,13 @@ const RectangularStructureAnalysis: React.FC<RectangularStructureAnalysisProps> 
               varying float vStress;
               
               void main() {
-                // Use the stress value to sample from the heat map
-                vec4 color = texture2D(heatmapTexture, vec2(vStress, 0.5));
-                gl_FragColor = color;
+                // Enhanced color mapping with smoother transitions
+                vec2 stressCoord = vec2(smoothstep(0.0, 1.0, vStress), 0.5);
+                vec4 color = texture2D(heatmapTexture, stressCoord);
+                
+                // Add slight ambient occlusion effect
+                float ao = 1.0 - vStress * 0.2;
+                gl_FragColor = vec4(color.rgb * ao, color.a);
               }
             `;
             
@@ -278,6 +387,7 @@ const RectangularStructureAnalysis: React.FC<RectangularStructureAnalysisProps> 
         columnDepth
       );
       
+      // Create columns with labels and selection
       for (let i = 0; i < columnsAlongLength; i++) {
         for (let j = 0; j < columnsAlongWidth; j++) {
           const column = new THREE.Mesh(columnGeometry, buildingMaterial);
@@ -286,6 +396,32 @@ const RectangularStructureAnalysis: React.FC<RectangularStructureAnalysisProps> 
           column.position.set(x, buildingHeight / 2, z);
           column.castShadow = true;
           column.receiveShadow = true;
+          
+          // Add column to structural elements array if not exists
+          const columnId = `C${i+1}-${j+1}`;
+          column.name = columnId;
+          column.userData.type = 'column';
+          column.userData.elementId = columnId;
+          
+          // Create label for column
+          const columnLabel = document.createElement('div');
+          columnLabel.className = 'element-label';
+          columnLabel.textContent = columnId;
+          columnLabel.style.position = 'absolute';
+          columnLabel.style.color = 'black';
+          columnLabel.style.backgroundColor = 'rgba(255, 255, 255, 0.7)';
+          columnLabel.style.padding = '2px 5px';
+          columnLabel.style.borderRadius = '3px';
+          columnLabel.style.fontSize = '10px';
+          columnLabel.style.pointerEvents = 'none';
+          
+          if (mountRef.current) {
+            mountRef.current.appendChild(columnLabel);
+          }
+          
+          // Store label in column's userData for position updates
+          column.userData.label = columnLabel;
+          
           buildingGroup.add(column);
         }
       }
@@ -327,6 +463,35 @@ const RectangularStructureAnalysis: React.FC<RectangularStructureAnalysisProps> 
           beam.position.set(0, y, z);
           beam.castShadow = true;
           beam.receiveShadow = true;
+          
+          // Add beam to structural elements array if not exists
+          const beamId = `BL${floor}-${j+1}`; // BL for Beam-Length direction
+          beam.name = beamId;
+          beam.userData.type = 'beam';
+          beam.userData.elementId = beamId;
+          beam.userData.orientation = 'x';
+          beam.userData.floor = floor;
+          beam.userData.length = buildingLength;
+          
+          // Create label for beam
+          const beamLabel = document.createElement('div');
+          beamLabel.className = 'element-label';
+          beamLabel.textContent = beamId;
+          beamLabel.style.position = 'absolute';
+          beamLabel.style.color = 'black';
+          beamLabel.style.backgroundColor = 'rgba(255, 255, 255, 0.7)';
+          beamLabel.style.padding = '2px 5px';
+          beamLabel.style.borderRadius = '3px';
+          beamLabel.style.fontSize = '10px';
+          beamLabel.style.pointerEvents = 'none';
+          
+          if (mountRef.current) {
+            mountRef.current.appendChild(beamLabel);
+          }
+          
+          // Store label in beam's userData for position updates
+          beam.userData.label = beamLabel;
+          
           buildingGroup.add(beam);
         }
       }
@@ -347,6 +512,35 @@ const RectangularStructureAnalysis: React.FC<RectangularStructureAnalysisProps> 
           beam.position.set(x, y, 0);
           beam.castShadow = true;
           beam.receiveShadow = true;
+          
+          // Add beam to structural elements array if not exists
+          const beamId = `BW${floor}-${i+1}`; // BW for Beam-Width direction
+          beam.name = beamId;
+          beam.userData.type = 'beam';
+          beam.userData.elementId = beamId;
+          beam.userData.orientation = 'z';
+          beam.userData.floor = floor;
+          beam.userData.length = buildingWidth;
+          
+          // Create label for beam
+          const beamLabel = document.createElement('div');
+          beamLabel.className = 'element-label';
+          beamLabel.textContent = beamId;
+          beamLabel.style.position = 'absolute';
+          beamLabel.style.color = 'black';
+          beamLabel.style.backgroundColor = 'rgba(255, 255, 255, 0.7)';
+          beamLabel.style.padding = '2px 5px';
+          beamLabel.style.borderRadius = '3px';
+          beamLabel.style.fontSize = '10px';
+          beamLabel.style.pointerEvents = 'none';
+          
+          if (mountRef.current) {
+            mountRef.current.appendChild(beamLabel);
+          }
+          
+          // Store label in beam's userData for position updates
+          beam.userData.label = beamLabel;
+          
           buildingGroup.add(beam);
         }
       }
@@ -432,37 +626,75 @@ const RectangularStructureAnalysis: React.FC<RectangularStructureAnalysisProps> 
     const buildingGroup = createStructure();
     scene.add(buildingGroup);
     
-    // Function to update exploded view
+    // Function to update exploded view with enhanced animation
     const updateExplodedView = (factor: number) => {
       if (!buildingGroup) return;
       
       // Reset all positions first
       let elementIndex = 0;
+      const time = Date.now() * 0.001; // Current time in seconds
       
       // Process each element in the building group
       buildingGroup.traverse((child) => {
         if (child instanceof THREE.Mesh) {
-          // Store original position if not stored
+          // Store original position and properties if not stored
           if (!child.userData.originalPosition) {
             child.userData.originalPosition = child.position.clone();
+            child.userData.originalRotation = child.rotation.clone();
+            child.userData.originalScale = child.scale.clone();
             child.userData.elementIndex = elementIndex++;
             
-            // Determine direction vector from center
+            // Calculate unique phase offset based on position
+            child.userData.phaseOffset = Math.random() * Math.PI * 2;
+            
+            // Determine direction vector from center with Y-bias
             const dirFromCenter = new THREE.Vector3()
               .copy(child.position)
               .normalize();
+            // Add upward bias to the explosion direction
+            dirFromCenter.y += 0.3;
+            dirFromCenter.normalize();
             
             child.userData.explodeDir = dirFromCenter;
+            
+            // Add random rotation axis
+            child.userData.rotationAxis = new THREE.Vector3(
+              Math.random() - 0.5,
+              Math.random() - 0.5,
+              Math.random() - 0.5
+            ).normalize();
           }
           
-          // Apply explosion factor
           const originalPos = child.userData.originalPosition;
           const explodeDir = child.userData.explodeDir;
+          const phaseOffset = child.userData.phaseOffset;
           
           if (originalPos && explodeDir) {
+            // Apply elastic easing to the explosion factor
+            const elasticFactor = factor * (1 + Math.sin(time * 2 + phaseOffset) * 0.1);
+            
+            // Calculate position with smooth transition
             child.position.copy(originalPos).add(
-              explodeDir.clone().multiplyScalar(factor)
+              explodeDir.clone().multiplyScalar(elasticFactor * 1.5)
             );
+            
+            // Apply rotation based on explosion factor
+            if (factor > 0) {
+              const rotationAmount = factor * Math.PI * 0.5;
+              child.rotation.copy(child.userData.originalRotation);
+              child.rotateOnAxis(child.userData.rotationAxis, rotationAmount);
+              
+              // Add subtle oscillation to rotation
+              const oscillation = Math.sin(time * 3 + phaseOffset) * 0.1 * factor;
+              child.rotateX(oscillation);
+              child.rotateZ(oscillation);
+            } else {
+              child.rotation.copy(child.userData.originalRotation);
+            }
+            
+            // Apply subtle scale animation
+            const scaleFactor = 1 + Math.sin(time * 4 + phaseOffset) * 0.05 * factor;
+            child.scale.copy(child.userData.originalScale).multiplyScalar(scaleFactor);
           }
         }
       });
@@ -484,12 +716,23 @@ const RectangularStructureAnalysis: React.FC<RectangularStructureAnalysisProps> 
           
           const originalPos = child.userData.originalPosition;
           if (originalPos) {
-            // Apply sinusoidal deflection based on Y position
-            // Higher elements deflect more
-            const deflectionFactor = child.position.y / buildingParameters.buildingHeight;
-            const offset = deflection * deflectionFactor;
+            // Apply sinusoidal deflection based on Y position and element type
+            let deflectionFactor = child.position.y / buildingParameters.buildingHeight;
             
-            child.position.y = originalPos.y + offset;
+            // Enhance deflection for beams and slabs
+            if (child.name.includes('beam') || child.name.includes('slab')) {
+              deflectionFactor *= 1.5;
+            }
+            
+            // Apply horizontal sway for columns
+            if (child.name.includes('column')) {
+              const horizontalDeflection = Math.sin(time * frequency * 0.5) * amplitude * 0.5;
+              child.position.x = originalPos.x + horizontalDeflection * deflectionFactor;
+            }
+            
+            // Vertical deflection
+            const verticalOffset = deflection * deflectionFactor;
+            child.position.y = originalPos.y + verticalOffset;
           }
         }
       });
@@ -513,6 +756,27 @@ const RectangularStructureAnalysis: React.FC<RectangularStructureAnalysisProps> 
       if (animateLoading) {
         animateLoadingEffect(time);
       }
+      
+      // Update element labels
+      scene.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.userData.label) {
+          const screenPosition = child.position.clone().project(camera);
+          const x = (screenPosition.x * 0.5 + 0.5) * width;
+          const y = (-(screenPosition.y * 0.5) + 0.5) * height;
+          child.userData.label.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px)`;
+          
+          // Show/hide label based on element visibility
+          const vector = new THREE.Vector3();
+          vector.setFromMatrixPosition(child.matrixWorld);
+          vector.project(camera);
+          
+          if (vector.z < 1) {
+            child.userData.label.style.display = 'block';
+          } else {
+            child.userData.label.style.display = 'none';
+          }
+        }
+      });
       
       animationFrameId = requestAnimationFrame(animate);
       controls.update();
@@ -539,6 +803,18 @@ const RectangularStructureAnalysis: React.FC<RectangularStructureAnalysisProps> 
     return () => {
       cancelAnimationFrame(animationFrameId);
       controls.dispose();
+      
+      // Remove element labels
+      scene.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.userData.label) {
+          if (mountRef.current && child.userData.label.parentNode === mountRef.current) {
+            mountRef.current.removeChild(child.userData.label);
+          }
+        }
+      });
+      
+      // Remove click event listener
+      renderer.domElement.removeEventListener('click', handleElementSelect);
       window.removeEventListener('resize', handleResize);
       
       if (currentMountRef) {
@@ -705,4 +981,4 @@ const RectangularStructureAnalysis: React.FC<RectangularStructureAnalysisProps> 
   );
 };
 
-export default RectangularStructureAnalysis; 
+export default RectangularStructureAnalysis;

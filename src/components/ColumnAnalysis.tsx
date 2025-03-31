@@ -37,8 +37,10 @@ const ColumnAnalysis: React.FC<ColumnAnalysisProps> = ({
     const effectiveLength = length * effectiveLengthFactor;
     
     // Radius of gyration (i = sqrt(I/A))
-    const radiusOfGyrationX = Math.sqrt(section.momentOfInertiaX / section.area);
-    const radiusOfGyrationY = Math.sqrt(section.momentOfInertiaY / section.area);
+    const area = section.area || 0.001; // Default to small value if undefined
+    const momentOfInertiaY = section.momentOfInertiaY || section.momentOfInertiaX; // Default to X if Y is undefined
+    const radiusOfGyrationX = Math.sqrt(section.momentOfInertiaX / area);
+    const radiusOfGyrationY = Math.sqrt(momentOfInertiaY / area);
     
     // Slenderness ratio (λ = Le/i)
     const slendernessRatioX = effectiveLength / radiusOfGyrationX;
@@ -49,7 +51,7 @@ const ColumnAnalysis: React.FC<ColumnAnalysisProps> = ({
     
     // Euler critical load (Pe = π²EI/Le²)
     const eulerCriticalLoadX = (Math.PI ** 2 * material.elasticModulus * 1e6 * section.momentOfInertiaX) / (effectiveLength ** 2);
-    const eulerCriticalLoadY = (Math.PI ** 2 * material.elasticModulus * 1e6 * section.momentOfInertiaY) / (effectiveLength ** 2);
+    const eulerCriticalLoadY = (Math.PI ** 2 * material.elasticModulus * 1e6 * momentOfInertiaY) / (effectiveLength ** 2);
     
     // Governing buckling direction (lowest critical load)
     const governingLoad = Math.min(eulerCriticalLoadX, eulerCriticalLoadY);
@@ -575,4 +577,4 @@ const ColumnAnalysis: React.FC<ColumnAnalysisProps> = ({
   );
 };
 
-export default ColumnAnalysis; 
+export default ColumnAnalysis;
