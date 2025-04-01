@@ -160,9 +160,39 @@ const Visualization: React.FC<VisualizationProps> = ({ parameters, results }) =>
       if (requestRef.current) {
         cancelAnimationFrame(requestRef.current);
       }
-      if (rendererRef.current && mountRef.current) {
-        mountRef.current.removeChild(rendererRef.current.domElement);
+      
+      // Properly dispose of Three.js objects
+      if (controlsRef.current) {
+        controlsRef.current.dispose();
+        controlsRef.current = null;
       }
+      
+      // Remove renderer from DOM safely
+      if (rendererRef.current) {
+        try {
+          // Only try to remove if mountRef exists and contains the renderer's domElement
+          if (mountRef.current && rendererRef.current.domElement && mountRef.current.contains(rendererRef.current.domElement)) {
+            mountRef.current.removeChild(rendererRef.current.domElement);
+          }
+        } catch (error) {
+          console.error('Error removing renderer from DOM:', error);
+        }
+        // Always dispose of the renderer
+        rendererRef.current.dispose();
+        rendererRef.current = null;
+      }
+      
+      // Clear scene
+      if (sceneRef.current) {
+        while(sceneRef.current.children.length > 0) { 
+          const object = sceneRef.current.children[0];
+          sceneRef.current.remove(object);
+        }
+        sceneRef.current = null;
+      }
+      
+      // Clear camera
+      cameraRef.current = null;
     };
   }, [animate, handleResize, addLightsToScene, addGridToScene]);
   
@@ -404,7 +434,12 @@ const Visualization: React.FC<VisualizationProps> = ({ parameters, results }) =>
   // Initialize 3D scene in useEffect
   useEffect(() => {
     const cleanup = initializeScene();
-    return cleanup;
+    return () => {
+      // Ensure cleanup function is called
+      if (cleanup) {
+        cleanup();
+      }
+    };
   }, [initializeScene]);
   
   // Control Button component for consistent styling

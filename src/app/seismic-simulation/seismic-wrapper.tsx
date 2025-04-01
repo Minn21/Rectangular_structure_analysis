@@ -1,51 +1,8 @@
-'use client';
+import React, { useRef, useState, useEffect } from 'react';
+import { Material } from '../types';
+import { SeismicParameters } from '../types';
 
-import React, { useEffect, useState, useRef } from 'react';
-import { Material, SeismicParameters } from '@/lib/types';
-import * as THREE from 'three';
-
-// Loading component for simulation
-export const SimulationLoading = () => (
-  <div className="bg-white rounded-lg shadow-md p-6">
-    <h2 className="text-xl font-semibold mb-4">Loading Seismic Simulation</h2>
-    <div className="p-10 bg-gray-100 rounded flex items-center justify-center">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
-        <p className="text-gray-600">Loading 3D visualization...</p>
-      </div>
-    </div>
-  </div>
-);
-
-interface SeismicSimulationWrapperProps {
-  buildingParameters: any; // Use any to avoid type issues
-  material: Material;
-  seismicParameters: SeismicParameters;
-  structuralResults?: any; // Add structural results prop
-  onSimulationComplete?: (results: any) => void;
-}
-
-interface SimulationResults {
-  maxDisplacement: number;
-  baseShear: number;
-  storyDrifts: number[];
-  periodOfVibration: number;
-  damagePercentage?: number;
-}
-
-// Add toRadians function
-const toRadians = (degrees: number): number => {
-  return degrees * (Math.PI / 180);
-};
-
-// Use React.memo to prevent unnecessary re-renders
-const SeismicSimulationWrapper: React.FC<SeismicSimulationWrapperProps> = React.memo(({
-  buildingParameters,
-  material,
-  seismicParameters,
-  structuralResults,
-  onSimulationComplete
-}) => {
+const SeismicSimulationWrapper = () => {
   console.log('SeismicSimulationWrapper rendering');
   
   const mountRef = useRef<HTMLDivElement>(null);
@@ -69,12 +26,19 @@ const SeismicSimulationWrapper: React.FC<SeismicSimulationWrapperProps> = React.
   const [currentView, setCurrentView] = useState<string>('default');
   const [showDamageKey, setShowDamageKey] = useState<boolean>(false);
   
-  // Track component mounting state
+  // Track component mounting state and handle cleanup
   useEffect(() => {
     isMountedRef.current = true;
     
     return () => {
+      // Set mounted flag to false first to prevent new operations
       isMountedRef.current = false;
+      
+      // Cancel any pending animation frames
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
     };
   }, []);
   
@@ -90,22 +54,18 @@ const SeismicSimulationWrapper: React.FC<SeismicSimulationWrapperProps> = React.
       console.log('SeismicSimulationWrapper unmounted');
     };
   }, []);
-
-  // Log when structural results change
-  useEffect(() => {
-    if (structuralResults) {
-      console.log('Structural results received in simulation:', structuralResults);
-    }
-  }, [structuralResults]);
-
+  
   // Initialize three.js scene, camera, and renderer
   useEffect(() => {
-    if (!mountRef.current) return;
+    // Immediately return if component is not mounted or mountRef is not available
+    if (!mountRef.current || !isMountedRef.current) return;
     
-    let width = mountRef.current.clientWidth;
-    let height = mountRef.current.clientHeight || 500;
+    console.log('Initializing Three.js scene');
     
-    console.log('Initializing Three.js scene with dimensions:', width, height);
+    // Store a reference to the current mount element to avoid closure issues
+    const mountElement = mountRef.current;
+    const width = mountElement.clientWidth;
+    const height = mountElement.clientHeight || 500;
     
     // Create scene
     const scene = new THREE.Scene();
@@ -118,8 +78,8 @@ const SeismicSimulationWrapper: React.FC<SeismicSimulationWrapperProps> = React.
     camera.lookAt(new THREE.Vector3(0, 0, 0));
     cameraRef.current = camera;
     
-    // Create renderer
-    const renderer = new THREE.WebGLRenderer({ 
+    // Create renderer - use let to allow reassignment if needed
+    let renderer = new THREE.WebGLRenderer({ 
       antialias: true,
       alpha: true,
     });
@@ -127,31 +87,355 @@ const SeismicSimulationWrapper: React.FC<SeismicSimulationWrapperProps> = React.
     renderer.setClearColor(0xf5f5f5, 1);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    
-    // Clear any existing canvas
-    if (mountRef.current.firstChild) {
-      mountRef.current.removeChild(mountRef.current.firstChild);
-    }
-    
-    mountRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
+    
+    // Safely clear any existing children from the mount element
+    const safelyRemoveChildren = () => {
+      if (!mountElement) return;
+      
+      // Use a safer approach with a static copy of children
+      const childNodes = Array.from(mountElement.childNodes);
+      childNodes.forEach(child => {
+        try {
+          if (mountElement.contains(child)) {
+            mountElement.removeChild(child);
+          }
+        } catch (e) {
+          console.warn('Error removing child node:', e);
+        }
+      });
+    };
+    
+    // Safely append the renderer to the DOM
+    const safelyAppendRenderer = () => {
+      if (!isMountedRef.current || !mountElement || !renderer) return;
+      
+      try {
+        // First check if the renderer's domElement already has a parent
+        if (renderer.domElement && renderer.domElement.parentNode) {
+          try {
+            renderer.domElement.parentNode.removeChild(renderer.domElement);
+          } catch (e) {
+            console.warn('Failed to remove renderer from previous parent:', e);
+            
+            // If we can't detach it, create a new renderer
+            if (rendererRef.current) {
+              rendererRef.current.dispose();
+            }
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(width, height);
+            renderer.setClearColor(0xf5f5f5, 1);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            rendererRef.current = renderer;
+          }
+        }
+        
+        // Now safely append the renderer to the DOM
+        if (isMountedRef.current && mountElement && renderer.domElement) {
+          safelyRemoveChildren(); // Clear existing children first
+          mountElement.appendChild(renderer.domElement);
+          console.log('Renderer appended to DOM successfully');
+        }
+      } catch (error) {
+        console.error('Error appending renderer to DOM:', error);
+      }
+    };
+    
+    // Execute the DOM operations safely
+    if (isMountedRef.current) {
+      // Use setTimeout to ensure DOM is ready
+      setTimeout(() => {
+        if (isMountedRef.current) {
+          safelyAppendRenderer();
+        }
+      }, 0);
+    }
     
     console.log('Three.js scene initialized');
     
     // Add window resize handler
     const handleResize = () => {
-      if (!mountRef.current || !rendererRef.current || !cameraRef.current) return;
+      if (!mountRef.current || !rendererRef.current || !cameraRef.current || !isMountedRef.current) return;
       
-      width = mountRef.current.clientWidth;
-      height = mountRef.current.clientHeight || 500;
+      const newWidth = mountRef.current.clientWidth;
+      const newHeight = mountRef.current.clientHeight || 500;
       
-      cameraRef.current.aspect = width / height;
+      cameraRef.current.aspect = newWidth / newHeight;
       cameraRef.current.updateProjectionMatrix();
       
-      rendererRef.current.setSize(width, height);
+      rendererRef.current.setSize(newWidth, newHeight);
     };
     
     window.addEventListener('resize', handleResize);
+    
+    // Cleanup function
+    return () => {
+      console.log('Cleaning up Three.js resources');
+      
+      // First set mounted flag to false to prevent any new operations
+      isMountedRef.current = false;
+      
+      // Remove event listeners
+      window.removeEventListener('resize', handleResize);
+      
+      // Cancel any pending animation frames
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+      
+      // Safely remove renderer's domElement from DOM
+      if (mountRef.current && rendererRef.current && rendererRef.current.domElement) {
+        try {
+          // Check if the domElement is actually a child of mountRef before removing
+          if (mountRef.current.contains(rendererRef.current.domElement)) {
+            mountRef.current.removeChild(rendererRef.current.domElement);
+          }
+        } catch (e) {
+          console.warn('Error removing renderer domElement:', e);
+        }
+      }
+      
+      // Dispose of all Three.js objects
+      if (sceneRef.current) {
+        // Properly dispose of all geometries and materials
+        sceneRef.current.traverse((object) => {
+          if (object instanceof THREE.Mesh) {
+            if (object.geometry) {
+              object.geometry.dispose();
+            }
+            
+            if (object.material) {
+              if (Array.isArray(object.material)) {
+                object.material.forEach(material => material.dispose());
+              } else {
+                object.material.dispose();
+              }
+            }
+          }
+        });
+        
+        // Clear the scene
+        while(sceneRef.current.children.length > 0) {
+          sceneRef.current.remove(sceneRef.current.children[0]);
+        }
+        
+        sceneRef.current = null;
+      }
+      
+      // Dispose of renderer
+      if (rendererRef.current) {
+        rendererRef.current.dispose();
+        rendererRef.current = null;
+      }
+      
+      // Clear camera reference
+      if (cameraRef.current) {
+        cameraRef.current = null;
+      }
+    };
+  }, []);
+  
+  // Log when structural results change
+  useEffect(() => {
+    if (structuralResults) {
+      console.log('Structural results received in simulation:', structuralResults);
+    }
+  }, [structuralResults]);
+  
+  // Initialize three.js scene, camera, and renderer
+  useEffect(() => {
+    // Immediately return if component is not mounted or mountRef is not available
+    if (!mountRef.current || !isMountedRef.current) return;
+    
+    console.log('Initializing Three.js scene');
+    
+    // Store a reference to the current mount element to avoid closure issues
+    const mountElement = mountRef.current;
+    const width = mountElement.clientWidth;
+    const height = mountElement.clientHeight || 500;
+    
+    // Create scene
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xf5f5f5); // Light gray background
+    sceneRef.current = scene;
+    
+    // Create camera
+    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+    camera.position.set(40, 30, 40);
+    camera.lookAt(new THREE.Vector3(0, 0, 0));
+    cameraRef.current = camera;
+    
+    // Create renderer - use let to allow reassignment if needed
+    let renderer = new THREE.WebGLRenderer({ 
+      antialias: true,
+      alpha: true,
+    });
+    renderer.setSize(width, height);
+    renderer.setClearColor(0xf5f5f5, 1);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    rendererRef.current = renderer;
+    
+    // Safely clear any existing children from the mount element
+    const safelyRemoveChildren = () => {
+      if (!mountElement) return;
+      
+      // Use a safer approach with a static copy of children
+      const childNodes = Array.from(mountElement.childNodes);
+      childNodes.forEach(child => {
+        try {
+          if (mountElement.contains(child)) {
+            mountElement.removeChild(child);
+          }
+        } catch (e) {
+          console.warn('Error removing child node:', e);
+        }
+      });
+    };
+    
+    // Safely append the renderer to the DOM
+    const safelyAppendRenderer = () => {
+      if (!isMountedRef.current || !mountElement || !renderer) return;
+      
+      try {
+        // First check if the renderer's domElement already has a parent
+        if (renderer.domElement && renderer.domElement.parentNode) {
+          try {
+            renderer.domElement.parentNode.removeChild(renderer.domElement);
+          } catch (e) {
+            console.warn('Failed to remove renderer from previous parent:', e);
+            
+            // If we can't detach it, create a new renderer
+            if (rendererRef.current) {
+              rendererRef.current.dispose();
+            }
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(width, height);
+            renderer.setClearColor(0xf5f5f5, 1);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            rendererRef.current = renderer;
+          }
+        }
+        
+        // Now safely append the renderer to the DOM
+        if (isMountedRef.current && mountElement && renderer.domElement) {
+          safelyRemoveChildren(); // Clear existing children first
+          mountElement.appendChild(renderer.domElement);
+          console.log('Renderer appended to DOM successfully');
+        }
+      } catch (error) {
+        console.error('Error appending renderer to DOM:', error);
+      }
+    };
+    
+    // Execute the DOM operations safely
+    if (isMountedRef.current) {
+      // Use setTimeout to ensure DOM is ready
+      setTimeout(() => {
+        if (isMountedRef.current) {
+          safelyAppendRenderer();
+        }
+      }, 0);
+    }
+    
+    console.log('Three.js scene initialized');
+    
+    // Add window resize handler
+    const handleResize = () => {
+      if (!mountRef.current || !rendererRef.current || !cameraRef.current || !isMountedRef.current) return;
+      
+      const newWidth = mountRef.current.clientWidth;
+      const newHeight = mountRef.current.clientHeight || 500;
+      
+      cameraRef.current.aspect = newWidth / newHeight;
+      cameraRef.current.updateProjectionMatrix();
+      
+      rendererRef.current.setSize(newWidth, newHeight);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    
+    // Cleanup function
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      
+      if (rendererRef.current) {
+        rendererRef.current.dispose();
+        rendererRef.current = null;
+      }
+      
+      if (sceneRef.current) {
+        sceneRef.current.traverse((object) => {
+          if (object instanceof THREE.Mesh) {
+            if (object.geometry) object.geometry.dispose();
+            if (object.material) {
+              if (Array.isArray(object.material)) {
+                object.material.forEach(material => material.dispose());
+              } else {
+                object.material.dispose();
+              }
+            }
+          }
+        });
+        sceneRef.current = null;
+      }
+      
+      // Safely remove renderer's domElement from mountRef
+      if (mountRef.current) {
+        try {
+          // Store a reference to the current mount element to avoid closure issues
+          const mountElement = mountRef.current;
+          
+          // First check if renderer's domElement is a child of mountRef
+          if (rendererRef.current && rendererRef.current.domElement) {
+            const domElement = rendererRef.current.domElement;
+            // Only try to remove if it's actually a child of mountRef
+            try {
+              if (mountElement.contains(domElement)) {
+                // Use requestAnimationFrame to ensure DOM operations happen in the right context
+                requestAnimationFrame(() => {
+                  try {
+                    if (mountElement.contains(domElement)) {
+                      mountElement.removeChild(domElement);
+                    }
+                  } catch (e) {
+                    console.warn('Failed to remove domElement in animation frame:', e);
+                  }
+                });
+              }
+            } catch (e) {
+              console.warn('Error checking if domElement is contained in mountElement:', e);
+            }
+          } 
+          // Then safely remove any remaining children if needed
+          else {
+            // Use a safer approach with Array.from to create a static copy of children
+            const childNodes = Array.from(mountElement.childNodes);
+            childNodes.forEach(child => {
+              try {
+                if (mountElement.contains(child)) {
+                  mountElement.removeChild(child);
+                }
+              } catch (e) {
+                console.warn('Error removing child node:', e);
+              }
+            });
+          }
+        } catch (error) {
+          console.error('Error cleaning up DOM nodes:', error);
+        }
+      }
+      
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+    };
     
     // Mouse event handling for camera controls
     const handleMouseDown = (e: MouseEvent) => {
@@ -239,11 +523,41 @@ const SeismicSimulationWrapper: React.FC<SeismicSimulationWrapperProps> = React.
       cameraRef.current.position.addScaledVector(zoomDirection, scrollAmount);
     };
     
-    // Add mouse event listeners
-    renderer.domElement.addEventListener('mousedown', handleMouseDown);
-    window.addEventListener('mouseup', handleMouseUp);
-    window.addEventListener('mousemove', handleMouseMove);
-    renderer.domElement.addEventListener('wheel', handleWheel, { passive: false });
+    // Add mouse event listeners with proper error handling
+    try {
+      // Store a reference to the renderer's domElement to ensure it's the same one we remove listeners from
+      const domElement = renderer.domElement;
+      
+      if (domElement) {
+        // Use try/catch for each event listener to prevent one failure from blocking others
+        try {
+          domElement.addEventListener('mousedown', handleMouseDown);
+        } catch (e) {
+          console.warn('Failed to add mousedown event listener:', e);
+        }
+        
+        try {
+          domElement.addEventListener('wheel', handleWheel, { passive: false });
+        } catch (e) {
+          console.warn('Failed to add wheel event listener:', e);
+        }
+      }
+      
+      // Add window event listeners
+      try {
+        window.addEventListener('mouseup', handleMouseUp);
+      } catch (e) {
+        console.warn('Failed to add mouseup event listener:', e);
+      }
+      
+      try {
+        window.addEventListener('mousemove', handleMouseMove);
+      } catch (e) {
+        console.warn('Failed to add mousemove event listener:', e);
+      }
+    } catch (error) {
+      console.error('Error adding event listeners:', error);
+    }
     
     // Create the building structure
     createBuildingStructure();
@@ -253,15 +567,52 @@ const SeismicSimulationWrapper: React.FC<SeismicSimulationWrapperProps> = React.
       setCameraView('default');
     }, 100);
     
-    // The animation loop
+    // The animation loop with improved safety checks
     const animate = () => {
-      if (!rendererRef.current || !sceneRef.current || !cameraRef.current || !isMountedRef.current) return;
+      // First check if component is still mounted before doing anything
+      if (!isMountedRef.current) {
+        // Safety cleanup if animation is running but component is unmounted
+        if (animationFrameRef.current !== null) {
+          cancelAnimationFrame(animationFrameRef.current);
+          animationFrameRef.current = null;
+        }
+        return;
+      }
       
-      rendererRef.current.render(sceneRef.current, cameraRef.current);
-      animationFrameRef.current = requestAnimationFrame(animate);
+      // Check if all required refs are valid
+      if (!rendererRef.current || !sceneRef.current || !cameraRef.current) {
+        console.warn('Missing required Three.js objects in animation loop');
+        return;
+      }
+      
+      try {
+        // Check again if component is mounted before rendering
+        if (isMountedRef.current) {
+          rendererRef.current.render(sceneRef.current, cameraRef.current);
+          
+          // Only request next frame if component is still mounted
+          if (isMountedRef.current) {
+            // Clear any existing animation frame first to prevent duplicates
+            if (animationFrameRef.current !== null) {
+              cancelAnimationFrame(animationFrameRef.current);
+            }
+            animationFrameRef.current = requestAnimationFrame(animate);
+          }
+        }
+      } catch (error) {
+        console.error('Error in animation loop:', error);
+        // Cancel animation frame on error
+        if (animationFrameRef.current) {
+          cancelAnimationFrame(animationFrameRef.current);
+          animationFrameRef.current = null;
+        }
+      }
     };
     
-    animate();
+    // Only start animation if component is mounted
+    if (isMountedRef.current) {
+      animate();
+    }
     
     // Once loaded, set loading state to false
     setTimeout(() => {
@@ -281,9 +632,20 @@ const SeismicSimulationWrapper: React.FC<SeismicSimulationWrapperProps> = React.
       
       // Remove event listeners
       window.removeEventListener('resize', handleResize);
-      if (rendererRef.current) {
-        rendererRef.current.domElement.removeEventListener('mousedown', handleMouseDown);
-        rendererRef.current.domElement.removeEventListener('wheel', handleWheel);
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('mousemove', handleMouseMove);
+      
+      // Safely remove event listeners from renderer domElement
+      if (rendererRef.current && rendererRef.current.domElement) {
+        try {
+          // Check if the domElement is still valid before removing event listeners
+          if (rendererRef.current.domElement instanceof Element) {
+            rendererRef.current.domElement.removeEventListener('mousedown', handleMouseDown);
+            rendererRef.current.domElement.removeEventListener('wheel', handleWheel);
+          }
+        } catch (error) {
+          console.error('Error removing event listeners:', error);
+        }
       }
       window.removeEventListener('mouseup', handleMouseUp);
       window.removeEventListener('mousemove', handleMouseMove);
@@ -305,8 +667,18 @@ const SeismicSimulationWrapper: React.FC<SeismicSimulationWrapperProps> = React.
         });
       }
       
-      // Dispose of renderer
+      // Dispose of renderer and safely remove its domElement from DOM
       if (rendererRef.current) {
+        // First try to safely remove the domElement from DOM if it's still attached
+        try {
+          if (rendererRef.current.domElement && rendererRef.current.domElement.parentNode) {
+            rendererRef.current.domElement.parentNode.removeChild(rendererRef.current.domElement);
+          }
+        } catch (error) {
+          console.error('Error removing renderer domElement from DOM:', error);
+        }
+        
+        // Then dispose the renderer
         rendererRef.current.dispose();
       }
     };
@@ -584,7 +956,14 @@ const SeismicSimulationWrapper: React.FC<SeismicSimulationWrapperProps> = React.
 
   // Start the simulation
   const startSimulation = () => {
+    // First check if component is still mounted
     if (!isMountedRef.current) return;
+    
+    // Cancel any existing animation frame before starting new simulation
+    if (animationFrameRef.current !== null) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
     
     setIsSimulating(true);
     setResults(null);
@@ -594,8 +973,9 @@ const SeismicSimulationWrapper: React.FC<SeismicSimulationWrapperProps> = React.
       elementDamageRef.current[key] = 0;
     });
     
-    // Make sure we have a scene before starting
-    if (!sceneRef.current) {
+    // Make sure we have a scene and renderer before starting
+    if (!sceneRef.current || !rendererRef.current || !cameraRef.current) {
+      console.error('Cannot start simulation: missing scene, renderer, or camera');
       if (isMountedRef.current) setIsSimulating(false);
       return;
     }
@@ -809,9 +1189,15 @@ const SeismicSimulationWrapper: React.FC<SeismicSimulationWrapperProps> = React.
         });
       }
       
-      // Continue the simulation if time hasn't elapsed
+      // Continue the simulation if time hasn't elapsed and component is still mounted
       if (elapsed < simulationDuration && isMountedRef.current) {
-        animationFrameRef.current = requestAnimationFrame(simulateEarthquake);
+        try {
+          animationFrameRef.current = requestAnimationFrame(simulateEarthquake);
+        } catch (error) {
+          console.error('Error requesting animation frame:', error);
+          // Safely end the simulation
+          if (isMountedRef.current) setIsSimulating(false);
+        }
       } else if (isMountedRef.current) {
         // Simulation complete - calculate results
         
@@ -1025,7 +1411,7 @@ const SeismicSimulationWrapper: React.FC<SeismicSimulationWrapperProps> = React.
           <div className="absolute inset-0 bg-white bg-opacity-80 flex justify-center items-center z-10">
             <div className="text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
-              <p className="text-gray-600">Loading visualization...</p>
+              <p className="text-gray-600">Loading 3D visualization...</p>
             </div>
           </div>
         )}
@@ -1260,6 +1646,6 @@ const SeismicSimulationWrapper: React.FC<SeismicSimulationWrapperProps> = React.
       )}
     </div>
   );
-});
+};
 
-export default SeismicSimulationWrapper; 
+export default SeismicSimulationWrapper;

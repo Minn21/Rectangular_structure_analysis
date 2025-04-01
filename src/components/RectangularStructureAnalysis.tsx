@@ -804,32 +804,37 @@ const RectangularStructureAnalysis: React.FC<RectangularStructureAnalysisProps> 
       cancelAnimationFrame(animationFrameId);
       controls.dispose();
       
-      // Remove element labels
-      scene.traverse((child) => {
-        if (child instanceof THREE.Mesh && child.userData.label) {
-          if (mountRef.current && child.userData.label.parentNode === mountRef.current) {
-            mountRef.current.removeChild(child.userData.label);
-          }
-        }
-      });
-      
-      // Remove click event listener
-      renderer.domElement.removeEventListener('click', handleElementSelect);
-      window.removeEventListener('resize', handleResize);
-      
-      if (currentMountRef) {
-        // Remove dimension labels if they exist
-        const labels = currentMountRef.querySelectorAll('.dimension-label');
-        labels.forEach(label => {
+      // Remove element labels and cleanup DOM nodes
+      const cleanupLabels = () => {
+        if (!currentMountRef) return;
+        
+        // First remove all element labels
+        const elementLabels = currentMountRef.getElementsByClassName('element-label');
+        Array.from(elementLabels).forEach(label => {
           if (label.parentNode === currentMountRef) {
             currentMountRef.removeChild(label);
           }
         });
         
-        // Remove renderer element
-        if (renderer.domElement && currentMountRef.contains(renderer.domElement)) {
-          currentMountRef.removeChild(renderer.domElement);
-        }
+        // Then remove dimension labels
+        const dimensionLabels = currentMountRef.getElementsByClassName('dimension-label');
+        Array.from(dimensionLabels).forEach(label => {
+          if (label.parentNode === currentMountRef) {
+            currentMountRef.removeChild(label);
+          }
+        });
+      };
+      
+      // Remove event listeners
+      renderer.domElement.removeEventListener('click', handleElementSelect);
+      window.removeEventListener('resize', handleResize);
+      
+      // Clean up DOM nodes
+      cleanupLabels();
+      
+      // Remove renderer element
+      if (currentMountRef && renderer.domElement && currentMountRef.contains(renderer.domElement)) {
+        currentMountRef.removeChild(renderer.domElement);
       }
       
       // Dispose of Three.js resources

@@ -628,8 +628,27 @@ const SeismicSimulation: React.FC<SeismicSimulationProps> = ({
     return () => {
       window.removeEventListener('resize', handleResize);
       cancelAnimationFrame(animationFrameId);
-      if (mountRef.current) {
-        mountRef.current.removeChild(renderer.domElement);
+      
+      // Safely remove renderer from DOM
+      if (mountRef.current && renderer && renderer.domElement) {
+        // Only try to remove if it's still a child of mountRef
+        if (mountRef.current.contains(renderer.domElement)) {
+          mountRef.current.removeChild(renderer.domElement);
+        }
+        renderer.dispose();
+      }
+      
+      // Clean up Three.js objects
+      if (controls) {
+        controls.dispose();
+      }
+      
+      // Clear scene
+      if (scene) {
+        while(scene.children.length > 0) { 
+          const object = scene.children[0];
+          scene.remove(object);
+        }
       }
     };
   }, [buildingParameters, material, isSimulating, seismicParameters, currentTime, showStressDiagram, simulationResults]);
