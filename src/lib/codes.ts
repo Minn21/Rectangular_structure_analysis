@@ -1,4 +1,28 @@
-import { DesignCode, LoadCombinationType, SeismicLoad, WindLoad, Loads, Location } from './types';
+// Define types here since they were previously imported
+export type DesignCode = 'ASCE7-16' | 'Eurocode';
+export type LoadCombinationType = 'LRFD' | 'ASD';
+
+export interface WindLoad {
+  basicWindSpeed: number;
+  velocityPressure: number;
+  windwardPressure: number;
+  leewardPressure: number;
+  designWindPressure: number;
+  baseShear: number;
+}
+
+export interface Location {
+  windZone: number;
+  terrain: string;
+  importance: number;
+}
+
+export interface Loads {
+  dead: number;
+  live: number;
+  wind?: WindLoad;
+  snow?: number;
+}
 
 // Interface for load combinations
 export interface LoadCombination {
@@ -10,7 +34,6 @@ export interface LoadCombination {
     live: number;
     snow?: number;
     wind?: number;
-    seismic?: number;
     rain?: number;
     thermal?: number;
   };
@@ -80,18 +103,6 @@ export const asce7_16_lrfd: LoadCombination[] = [
     type: 'LRFD',
   },
   {
-    name: 'ASCE 7-16 LRFD 6',
-    description: 'Dead + Seismic + Live',
-    formula: '1.2D + 1.0E + 1.0L',
-    factors: {
-      dead: 1.2,
-      live: 1.0,
-      seismic: 1.0,
-    },
-    code: 'ASCE7-16',
-    type: 'LRFD',
-  },
-  {
     name: 'ASCE 7-16 LRFD 7',
     description: 'Dead + Wind (uplift)',
     formula: '0.9D + 1.0W',
@@ -99,18 +110,6 @@ export const asce7_16_lrfd: LoadCombination[] = [
       dead: 0.9,
       live: 0,
       wind: 1.0,
-    },
-    code: 'ASCE7-16',
-    type: 'LRFD',
-  },
-  {
-    name: 'ASCE 7-16 LRFD 8',
-    description: 'Dead + Seismic (uplift)',
-    formula: '0.9D + 1.0E',
-    factors: {
-      dead: 0.9,
-      live: 0,
-      seismic: 1.0,
     },
     code: 'ASCE7-16',
     type: 'LRFD',
@@ -156,19 +155,6 @@ export const asce7_16_asd: LoadCombination[] = [
     type: 'ASD',
   },
   {
-    name: 'ASCE 7-16 ASD 4',
-    description: 'Dead + Seismic + Live + Snow',
-    formula: 'D + 0.7E + L + 0.75S',
-    factors: {
-      dead: 1.0,
-      live: 1.0,
-      seismic: 0.7,
-      snow: 0.75,
-    },
-    code: 'ASCE7-16',
-    type: 'ASD',
-  },
-  {
     name: 'ASCE 7-16 ASD 5',
     description: 'Dead + Wind (uplift)',
     formula: '0.6D + 0.75W',
@@ -176,18 +162,6 @@ export const asce7_16_asd: LoadCombination[] = [
       dead: 0.6,
       live: 0,
       wind: 0.75,
-    },
-    code: 'ASCE7-16',
-    type: 'ASD',
-  },
-  {
-    name: 'ASCE 7-16 ASD 6',
-    description: 'Dead + Seismic (uplift)',
-    formula: '0.6D + 0.7E',
-    factors: {
-      dead: 0.6,
-      live: 0,
-      seismic: 0.7,
     },
     code: 'ASCE7-16',
     type: 'ASD',
@@ -231,18 +205,6 @@ export const eurocode_uls: LoadCombination[] = [
     code: 'Eurocode',
     type: 'LRFD',
   },
-  {
-    name: 'Eurocode ULS 4',
-    description: 'Dead + Seismic',
-    formula: 'G + E',
-    factors: {
-      dead: 1.0,
-      live: 0.3,
-      seismic: 1.0,
-    },
-    code: 'Eurocode',
-    type: 'LRFD',
-  },
 ];
 
 // Combined array of all load combinations
@@ -254,195 +216,107 @@ export const allLoadCombinations: LoadCombination[] = [
 
 // Wind load calculation per ASCE 7-16
 export function calculateWindLoad(location: Location, buildingHeight: number, buildingWidth: number): WindLoad {
-  // Basic wind speed from location
-  const V = location.basicWindSpeed; // m/s
+  // Basic wind speed based on location (mph)
+  // Simplified - in reality would be from wind speed maps
+  const basicWindSpeed = 115 + (location.windZone * 10); // Base of 115 mph + adjustment for zone
   
-  // Exposure category from location
-  const exposureCategory = location.terrainCategory > 3 ? 'D' : location.terrainCategory > 1 ? 'C' : 'B';
-  
-  // Wind directionality factor
-  const Kd = 0.85; // Typical for buildings
-  
-  // Topographic factor (simplified)
-  const Kzt = 1.0;
-  
-  // Importance factor based on building category
-  const I = location.importanceCategory === 'I' ? 0.87 : 
-            location.importanceCategory === 'II' ? 1.0 : 
-            location.importanceCategory === 'III' ? 1.15 : 1.2;
-  
-  // Velocity pressure exposure coefficient at height z
-  // Note: This is a simplified calculation
-  const z = buildingHeight;
-  let Kz = 0;
-  
-  if (exposureCategory === 'B') {
-    if (z < 4.6) Kz = 0.57;
-    else Kz = 0.62 * Math.pow(z / 10, 0.25);
-  } else if (exposureCategory === 'C') {
-    if (z < 4.6) Kz = 0.85;
-    else Kz = 0.9 * Math.pow(z / 10, 0.2);
-  } else {
-    if (z < 4.6) Kz = 1.03;
-    else Kz = 1.1 * Math.pow(z / 10, 0.15);
+  // Simplified exposure category factor based on terrain
+  let exposureCategoryFactor = 1.0; // Default for Exposure B (Urban/suburban areas)
+  if (location.terrain === 'open') {
+    exposureCategoryFactor = 1.2; // Exposure C (Open terrain)
+  } else if (location.terrain === 'flat') {
+    exposureCategoryFactor = 1.4; // Exposure D (Flat, unobstructed areas)
   }
   
-  // Velocity pressure (SI units: N/m²)
-  const qz = 0.613 * Kz * Kzt * Kd * V * V * I;
+  // Importance factor based on building occupancy/risk category
+  const importanceFactor = 1.0 + (0.1 * location.importance); // 1.0 - 1.4 range
+  
+  // Simplified topographic factor
+  const topographicFactor = 1.0; // Assuming no special topographic effects
+  
+  // Simplified gust factor
+  const gustFactor = 0.85;
+  
+  // Direction factor (simplified)
+  const directionFactor = 0.85;
+  
+  // Convert wind speed to pressure (simplified)
+  // Pressure = 0.00256 * V^2 * Kz * Kzt * Kd * Kz
+  // Where V is wind speed in mph
+  const velocityPressure = 0.00256 * Math.pow(basicWindSpeed, 2) * 
+                           exposureCategoryFactor * topographicFactor * 
+                           directionFactor * importanceFactor;
   
   // Simplified pressure coefficients
-  const Cp_windward = 0.8;  // Windward face
-  const Cp_leeward = -0.5; // Leeward face
-  const Cp_sideWall = -0.7; // Side walls
-  const Cp_roof = -0.7;    // Roof (simplified)
+  const windwardCoefficient = 0.8;
+  const leewardCoefficient = -0.5;
   
-  // Gust effect factor (simplified)
-  const G = 0.85;
+  // Calculate design wind pressures
+  const windwardPressure = velocityPressure * windwardCoefficient;
+  const leewardPressure = velocityPressure * leewardCoefficient;
   
-  // Wall pressures
-  const p_windward = qz * G * Cp_windward;
-  const p_leeward = qz * G * Cp_leeward;
-  const p_sideWall = qz * G * Cp_sideWall;
-  const p_roof = qz * G * Cp_roof;
+  // Calculate base shear (simplified)
+  // Total wind load = pressure * area
+  const buildingArea = buildingHeight * buildingWidth;
+  const totalWindLoad = (windwardPressure - leewardPressure) * buildingArea;
   
-  // Return complete wind load data
   return {
-    basicSpeed: V,
-    direction: 0, // Assumed along x-axis
-    exposureCategory,
-    gustFactor: G,
-    pressureCoefficients: {
-      windward: Cp_windward,
-      leeward: Cp_leeward,
-      sideWall: Cp_sideWall,
-      roof: Cp_roof,
-    },
-    // Additional calculated data for use in calculations
-    velocityPressure: qz,
-    pressures: {
-      windward: p_windward,
-      leeward: p_leeward,
-      sideWall: p_sideWall,
-      roof: p_roof,
-    },
-    totalForce: (p_windward - p_leeward) * buildingHeight * buildingWidth, // Force in N
+    basicWindSpeed,
+    velocityPressure,
+    windwardPressure,
+    leewardPressure, 
+    designWindPressure: windwardPressure - leewardPressure,
+    baseShear: totalWindLoad
   };
 }
 
-// Seismic load calculation per ASCE 7-16
-export function calculateSeismicLoad(location: Location, buildingHeight: number, totalWeight: number): SeismicLoad {
-  // Site class from location
-  const siteClass = location.siteClass;
-  
-  // Importance factor based on building category
-  const I = location.importanceCategory === 'I' ? 1.0 : 
-            location.importanceCategory === 'II' ? 1.0 : 
-            location.importanceCategory === 'III' ? 1.25 : 1.5;
-  
-  // Response modification factor (R) - assumed typical value for moment frame
-  const R = 8.0;
-  
-  // Spectral response acceleration parameters
-  // These would normally come from hazard maps or online tools based on location
-  // Using simplified placeholders based on seismic zone
-  const Ss = 0.2 * location.seismicZone; // Short period spectral acceleration
-  const S1 = 0.1 * location.seismicZone; // 1-second period spectral acceleration
-  
-  // Site coefficients
-  let Fa = 1.0;
-  let Fv = 1.0;
-  
-  // Simplified site coefficients based on site class
-  if (siteClass === 'A') {
-    Fa = 0.8;
-    Fv = 0.8;
-  } else if (siteClass === 'B') {
-    Fa = 1.0;
-    Fv = 1.0;
-  } else if (siteClass === 'C') {
-    Fa = 1.2;
-    Fv = 1.7;
-  } else if (siteClass === 'D') {
-    Fa = 1.6;
-    Fv = 2.4;
-  } else {
-    Fa = 2.5;
-    Fv = 3.5;
-  }
-  
-  // Design spectral acceleration parameters
-  const SMS = Fa * Ss;
-  const SM1 = Fv * S1;
-  const SDS = (2/3) * SMS;
-  const SD1 = (2/3) * SM1;
-  
-  // Approximate fundamental period of the structure
-  const Ct = 0.028; // Steel moment frame (in meters)
-  const x = 0.8;
-  const Ta = Ct * Math.pow(buildingHeight, x);
-  
-  // Design base shear
-  const Cs = Math.min(SDS / (R/I), SD1 / (Ta * (R/I)));
-  const V = Cs * totalWeight; // Base shear in N
-  
-  return {
-    sds: SDS,
-    sd1: SD1,
-    importanceFactor: I,
-    responseModificationFactor: R,
-    siteClass: siteClass,
-    // Additional calculated data for use in calculations
-    approximatePeriod: Ta,
-    baseShear: V,
-    seismicResponseCoefficient: Cs,
-  };
-}
-
-// Apply load combination to loads
+// Apply a load combination to get total load
 export function applyLoadCombination(loads: Loads, combination: LoadCombination): number {
   let totalLoad = 0;
   
-  totalLoad += loads.dead * combination.factors.dead;
-  totalLoad += loads.live * combination.factors.live;
+  // Apply dead load
+  if (combination.factors.dead) {
+    totalLoad += loads.dead * combination.factors.dead;
+  }
   
+  // Apply live load
+  if (combination.factors.live) {
+    totalLoad += loads.live * combination.factors.live;
+  }
+  
+  // Apply wind load if applicable
+  if (combination.factors.wind && loads.wind) {
+    totalLoad += loads.wind.baseShear * combination.factors.wind;
+  }
+  
+  // Apply snow load if applicable
   if (combination.factors.snow && loads.snow) {
     totalLoad += loads.snow * combination.factors.snow;
-  }
-  
-  if (combination.factors.wind && loads.wind) {
-    // Simplified approach for wind
-    totalLoad += loads.wind.basicSpeed * combination.factors.wind;
-  }
-  
-  if (combination.factors.seismic && loads.seismic) {
-    // Simplified approach for seismic
-    totalLoad += loads.seismic.sds * combination.factors.seismic;
   }
   
   return totalLoad;
 }
 
-// Get load combinations for a specified code and type
+// Get load combinations for a specific code and type
 export function getLoadCombinations(code: DesignCode, type: LoadCombinationType): LoadCombination[] {
-  return allLoadCombinations.filter(comb => comb.code === code && comb.type === type);
+  return allLoadCombinations.filter(combo => combo.code === code && combo.type === type);
 }
 
-// Get design default values by code
+// Get design defaults based on code
 export function getDesignDefaults(code: DesignCode): {
   allowableDeflectionRatio: number;
   allowableStressRatio: number;
 } {
   switch (code) {
     case 'ASCE7-16':
-    case 'ASCE7-22':
       return {
-        allowableDeflectionRatio: 360, // L/360 for typical live load only
-        allowableStressRatio: 0.6, // Typical for ASD
+        allowableDeflectionRatio: 360, // L/360 for live load
+        allowableStressRatio: 0.6, // 0.6Fy for ASD
       };
     case 'Eurocode':
       return {
-        allowableDeflectionRatio: 300, // L/300 is common in Eurocode
-        allowableStressRatio: 0.66, // Simplified for comparison
+        allowableDeflectionRatio: 250, // L/250 for variable actions
+        allowableStressRatio: 0.7, // Typical allowable stress ratio
       };
     default:
       return {
@@ -452,7 +326,7 @@ export function getDesignDefaults(code: DesignCode): {
   }
 }
 
-// Verify design according to code
+// Verify design against code requirements
 export function verifyDesign(
   code: DesignCode, 
   spanLength: number, 
@@ -467,18 +341,18 @@ export function verifyDesign(
 } {
   const defaults = getDesignDefaults(code);
   
-  const allowableDeflection = spanLength / defaults.allowableDeflectionRatio;
-  const allowableStress = yieldStress * defaults.allowableStressRatio;
+  // Calculate actual deflection ratio (span/deflection)
+  const actualDeflectionRatio = spanLength / maxDeflection;
+  const deflectionCheck = actualDeflectionRatio >= defaults.allowableDeflectionRatio;
   
-  const deflectionCheck = maxDeflection <= allowableDeflection;
-  const stressCheck = maxStress <= allowableStress;
-  const deflectionRatio = maxDeflection / allowableDeflection;
-  const stressRatio = maxStress / allowableStress;
+  // Calculate stress ratio (actual/allowable)
+  const stressRatio = maxStress / (yieldStress * defaults.allowableStressRatio);
+  const stressCheck = stressRatio <= 1.0;
   
   return {
     deflectionCheck,
     stressCheck,
-    deflectionRatio,
-    stressRatio,
+    deflectionRatio: actualDeflectionRatio,
+    stressRatio
   };
 } 

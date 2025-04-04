@@ -271,139 +271,160 @@ function performDynamicAnalysis(params: BuildingParameters): {
 }
 
 // Enhanced building calculations with additional analyses
-export function calculateBuildingResults(params: BuildingParameters): CalculationResults {
-    // Original calculation logic
-    const {
-        buildingLength: L,
-        buildingWidth: W,
-        buildingHeight: H,
-        numberOfStoreys: Ns,
-        columnsAlongLength: M,
-        columnsAlongWidth: N,
-        slabLoad: q,
-        beamWidth: b,
-        beamHeight: h,
-        elasticModulus: E,
-        columnWidth: cw,
-        columnDepth: cd,
-    } = params;
+export function calculateBuildingResults(params: BuildingParameters, material?: any): CalculationResults {
+    // Perform structural analysis to determine building behavior
+    try {
+        // For consistent results, make sure params has numerical values
+        const validParams = {
+            ...params,
+            buildingLength: Number(params.buildingLength),
+            buildingWidth: Number(params.buildingWidth),
+            buildingHeight: Number(params.buildingHeight),
+            numberOfStoreys: Number(params.numberOfStoreys),
+            columnsAlongLength: Number(params.columnsAlongLength),
+            columnsAlongWidth: Number(params.columnsAlongWidth),
+            beamWidth: Number(params.beamWidth),
+            beamHeight: Number(params.beamHeight),
+            slabThickness: Number(params.slabThickness),
+            columnWidth: Number(params.columnWidth),
+            columnDepth: Number(params.columnDepth)
+        };
 
-    const dx = L / (M - 1); // Spacing between columns along x
-    const dz = W / (N - 1); // Spacing between columns along z
-    const I = (b * h ** 3) / 12; // Moment of inertia for beams
-    const beamResults: BeamResults[] = [];
-    
-    // Beams along x-direction
-    const beamLengthX = dx; // Length of each beam segment along x
-    for (let k = 1; k <= Ns; k++) {
-        for (let j = 0; j < N; j++) {
-            const isEdgeZ = j === 0 || j === N - 1;
-            const tributaryWidth = isEdgeZ ? dz / 2 : dz;
-            const w = q * tributaryWidth;
-            for (let i = 0; i < M - 1; i++) {
-                // Use 'continuous' for interior beams and 'simple' for edge beams
-                const endCondition = (i > 0 && i < M - 2) ? 'continuous' : 'simple';
-                const beamResult = calculateBeamResults(w, beamLengthX, E, I, h, endCondition);
-                beamResults.push(beamResult);
+        // Original calculation logic
+        const {
+            buildingLength: L,
+            buildingWidth: W,
+            buildingHeight: H,
+            numberOfStoreys: Ns,
+            columnsAlongLength: M,
+            columnsAlongWidth: N,
+            slabLoad: q,
+            beamWidth: b,
+            beamHeight: h,
+            elasticModulus: E,
+            columnWidth: cw,
+            columnDepth: cd,
+        } = validParams;
+
+        const dx = L / (M - 1); // Spacing between columns along x
+        const dz = W / (N - 1); // Spacing between columns along z
+        const I = (b * h ** 3) / 12; // Moment of inertia for beams
+        const beamResults: BeamResults[] = [];
+        
+        // Beams along x-direction
+        const beamLengthX = dx; // Length of each beam segment along x
+        for (let k = 1; k <= Ns; k++) {
+            for (let j = 0; j < N; j++) {
+                const isEdgeZ = j === 0 || j === N - 1;
+                const tributaryWidth = isEdgeZ ? dz / 2 : dz;
+                const w = q * tributaryWidth;
+                for (let i = 0; i < M - 1; i++) {
+                    // Use 'continuous' for interior beams and 'simple' for edge beams
+                    const endCondition = (i > 0 && i < M - 2) ? 'continuous' : 'simple';
+                    const beamResult = calculateBeamResults(w, beamLengthX, E, I, h, endCondition);
+                    beamResults.push(beamResult);
+                }
             }
         }
-    }
 
-    // Beams along z-direction
-    const beamLengthZ = dz; // Length of each beam segment along z
-    for (let k = 1; k <= Ns; k++) {
+        // Beams along z-direction
+        const beamLengthZ = dz; // Length of each beam segment along z
+        for (let k = 1; k <= Ns; k++) {
+            for (let i = 0; i < M; i++) {
+                const isEdgeX = i === 0 || i === M - 1;
+                const tributaryWidth = isEdgeX ? dx / 2 : dx;
+                const w = q * tributaryWidth;
+                for (let j = 0; j < N - 1; j++) {
+                    // Use 'continuous' for interior beams and 'simple' for edge beams
+                    const endCondition = (j > 0 && j < N - 2) ? 'continuous' : 'simple';
+                    const beamResult = calculateBeamResults(w, beamLengthZ, E, I, h, endCondition);
+                    beamResults.push(beamResult);
+                }
+            }
+        }
+
+        // Column axial loads
+        const columnAxialLoads: number[] = [];
         for (let i = 0; i < M; i++) {
-            const isEdgeX = i === 0 || i === M - 1;
-            const tributaryWidth = isEdgeX ? dx / 2 : dx;
-            const w = q * tributaryWidth;
-            for (let j = 0; j < N - 1; j++) {
-                // Use 'continuous' for interior beams and 'simple' for edge beams
-                const endCondition = (j > 0 && j < N - 2) ? 'continuous' : 'simple';
-                const beamResult = calculateBeamResults(w, beamLengthZ, E, I, h, endCondition);
-                beamResults.push(beamResult);
+            for (let j = 0; j < N; j++) {
+                let A = 0;
+                if (i === 0 || i === M - 1) A = dx / 2;
+                else A = dx;
+                if (j === 0 || j === N - 1) A *= dz / 2;
+                else A *= dz;
+                const axialLoad = q * A * Ns;
+                columnAxialLoads.push(axialLoad);
             }
         }
+
+        const maxBeamDeflection = Math.max(...beamResults.map(b => b.maxDeflection));
+        const maxBeamStress = Math.max(...beamResults.map(b => b.maxStress));
+        const columnArea = cw * cd;
+        const maxColumnStress = Math.max(...columnAxialLoads.map(F => F / columnArea));
+
+        // Calculate allowable values
+        const allowableDeflection = Math.max(dx, dz) / 360; // Span/360 is common for live load deflection limit
+        const allowableStress = material.yieldStrength * 0.6; // 60% of yield strength as allowable stress
+
+        // Calculate total structural weight
+        const totalWeight = calculateStructuralWeight(validParams);
+        
+        // Calculate buckling loads
+        const Icolumn = (cw * cd ** 3) / 12;
+        const bucklingLoad = calculateBuckling(E, Icolumn, H / Ns);
+        const maxColumnLoad = Math.max(...columnAxialLoads);
+        const bucklingFactor = bucklingLoad / maxColumnLoad;
+        
+        // Calculate approximate period of vibration (simplified)
+        const stiffness = (48 * E * I) / ((dx + dz) / 2) ** 3; // Approximate lateral stiffness
+        const approximateMass = totalWeight / 9.81; // Mass in kg
+        const naturalFrequency = calculateNaturalFrequency(stiffness, approximateMass);
+        const periodOfVibration = 1 / naturalFrequency;
+        
+        // Perform dynamic analysis
+        const dynamicAnalysis = performDynamicAnalysis(validParams);
+        
+        // Calculate base shear (simplified lateral load)
+        const lateralLoadFactor = 0.05; // Simple factor for lateral load calculation (wind or other)
+        const baseShear = lateralLoadFactor * (totalWeight);
+        
+        // Maximum lateral displacement (simplified)
+        const maximumDisplacement = baseShear / stiffness;
+        
+        // Perform structural checks
+        const baseResults: CalculationResults = {
+            beamResults,
+            columnAxialLoads,
+            maxBeamDeflection,
+            maxBeamStress,
+            maxColumnStress,
+            allowableDeflection,
+            allowableStress
+        };
+        
+        const structuralChecks = performStructuralChecks(baseResults, validParams);
+
+        // Return enhanced results
+        return {
+            ...baseResults,
+            structuralChecks,
+            totalWeight,
+            naturalFrequency,
+            periodOfVibration,
+            maximumDisplacement,
+            baseShear,
+            buckling: {
+                bucklingFactor,
+                bucklingModes: [{ factor: bucklingFactor, shape: [1.0] }], // Simplified buckling mode shape
+                effectiveLengthFactor: 1.0,
+                slendernessRatio: (H / Ns) / Math.sqrt(Icolumn / columnArea)
+            },
+            dynamicAnalysis
+        };
+    } catch (error) {
+        console.error("Error in calculateBuildingResults:", error);
+        throw error;
     }
-
-    // Column axial loads
-    const columnAxialLoads: number[] = [];
-    for (let i = 0; i < M; i++) {
-        for (let j = 0; j < N; j++) {
-            let A = 0;
-            if (i === 0 || i === M - 1) A = dx / 2;
-            else A = dx;
-            if (j === 0 || j === N - 1) A *= dz / 2;
-            else A *= dz;
-            const axialLoad = q * A * Ns;
-            columnAxialLoads.push(axialLoad);
-        }
-    }
-
-    const maxBeamDeflection = Math.max(...beamResults.map(b => b.maxDeflection));
-    const maxBeamStress = Math.max(...beamResults.map(b => b.maxStress));
-    const columnArea = cw * cd;
-    const maxColumnStress = Math.max(...columnAxialLoads.map(F => F / columnArea));
-
-    // Calculate allowable values
-    const material = getMaterial(params.materialName || 'steel');
-    const allowableDeflection = Math.max(dx, dz) / 360; // Span/360 is common for live load deflection limit
-    const allowableStress = material.yieldStrength * 0.6; // 60% of yield strength as allowable stress
-
-    // Calculate total structural weight
-    const totalWeight = calculateStructuralWeight(params);
-    
-    // Calculate buckling loads
-    const Icolumn = (cw * cd ** 3) / 12;
-    const bucklingLoad = calculateBuckling(E, Icolumn, H / Ns);
-    const maxColumnLoad = Math.max(...columnAxialLoads);
-    const bucklingFactor = bucklingLoad / maxColumnLoad;
-    
-    // Calculate approximate period of vibration (simplified)
-    const stiffness = (48 * E * I) / ((dx + dz) / 2) ** 3; // Approximate lateral stiffness
-    const approximateMass = totalWeight / 9.81; // Mass in kg
-    const naturalFrequency = calculateNaturalFrequency(stiffness, approximateMass);
-    const periodOfVibration = 1 / naturalFrequency;
-    
-    // Perform dynamic analysis
-    const dynamicAnalysis = performDynamicAnalysis(params);
-    
-    // Calculate base shear (very simplified)
-    const seismicCoefficient = 0.1; // Example value, would be determined by code
-    const baseShear = seismicCoefficient * (totalWeight);
-    
-    // Maximum lateral displacement (simplified)
-    const maximumDisplacement = baseShear / stiffness;
-    
-    // Perform structural checks
-    const baseResults: CalculationResults = {
-        beamResults,
-        columnAxialLoads,
-        maxBeamDeflection,
-        maxBeamStress,
-        maxColumnStress,
-        allowableDeflection,
-        allowableStress
-    };
-    
-    const structuralChecks = performStructuralChecks(baseResults, params);
-
-    // Return enhanced results
-    return {
-        ...baseResults,
-        structuralChecks,
-        totalWeight,
-        naturalFrequency,
-        periodOfVibration,
-        maximumDisplacement,
-        baseShear,
-        buckling: {
-            bucklingFactor,
-            bucklingModes: [{ factor: bucklingFactor, shape: [1.0] }], // Simplified buckling mode shape
-            effectiveLengthFactor: 1.0,
-            slendernessRatio: (H / Ns) / Math.sqrt(Icolumn / columnArea)
-        },
-        dynamicAnalysis
-    };
 }
 
 // Function to validate input parameters

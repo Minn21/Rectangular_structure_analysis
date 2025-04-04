@@ -708,7 +708,6 @@ export function recommendOptimalFoundation(
   soilConditions: {
     soilType: string;
     groundwaterLevel?: number; // meters below surface
-    seismicZone?: number; // 0-4 scale
     frostDepth?: number; // meters
     adjacentStructures?: boolean;
     SPTvalue?: number; // Standard Penetration Test N-value
@@ -756,25 +755,6 @@ export function recommendOptimalFoundation(
   const specialConsiderations: string[] = [];
   
   // Factors that might affect the recommendation
-  
-  // 1. Seismic considerations
-  if (soilConditions.seismicZone && soilConditions.seismicZone >= 3) {
-    // In high seismic zones, spread footings might not be appropriate for important structures
-    if (initialRecommendation === 'SpreadFooting' && buildingType !== 'storage') {
-      recommendedFoundationType = 'MatFoundation';
-      rationale.push(`High seismic zone (${soilConditions.seismicZone}) requires more rigid foundation system`);
-      alternativeFoundationType = 'SpreadFooting';
-    }
-    
-    // For very tall buildings in seismic zones, pile foundations provide better performance
-    if (buildingHeight > 30 && initialRecommendation !== 'PileFoundation') {
-      alternativeFoundationType = recommendedFoundationType;
-      recommendedFoundationType = 'PileFoundation';
-      rationale.push(`Tall building (${buildingHeight}m) in seismic zone ${soilConditions.seismicZone} benefits from deep foundation`);
-    }
-    
-    specialConsiderations.push("Include seismic design provisions with appropriate connection detailing");
-  }
   
   // 2. High groundwater considerations
   if (soilConditions.groundwaterLevel !== undefined && soilConditions.groundwaterLevel < 2) {
