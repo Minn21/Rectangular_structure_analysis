@@ -84,6 +84,15 @@ const defaultBuildingParameters = {
 };
 
 export default function RectangularStructureVisualization() {
+  // Add a ref to track component mounted state
+  const isMountedRef = React.useRef(true);
+  
+  // Set mounted state to false when component unmounts
+  React.useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
   // State for building parameters
   const [buildingParameters, setBuildingParameters] = useState(defaultBuildingParameters);
   
@@ -357,4 +366,4 @@ export default function RectangularStructureVisualization() {
       </div>
     </div>
   );
-} 
+}

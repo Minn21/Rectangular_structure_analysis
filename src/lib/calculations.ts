@@ -1,9 +1,9 @@
-import { BuildingParameters, BeamResults, CalculationResults, StructuralChecks, UnitSystem } from './types';
+import { BuildingParameters, BeamResult, CalculationResults, StructuralChecks, UnitSystem } from './types';
 import { getMaterial } from './materials';
 
 // Enhanced beam calculation with moment and shear diagrams
 function calculateBeamResults(w: number, L: number, E: number, I: number, h: number, 
-                              endCondition: 'simple' | 'fixed' | 'cantilever' | 'continuous' = 'simple'): BeamResults {
+                              endCondition: 'simple' | 'fixed' | 'cantilever' | 'continuous' = 'simple'): BeamResult {
     // Calculate based on end conditions
     let maxDeflection: number;
     let M_max: number;
