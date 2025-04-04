@@ -72,7 +72,6 @@ const FoundationAnalysisDashboard: React.FC = () => {
     {
       soilType: soilProperties.soilType,
       groundwaterLevel: 3,
-      seismicZone: 2,
       frostDepth: 0.5,
       adjacentStructures: false,
       SPTvalue: soilProperties.SPTvalue
